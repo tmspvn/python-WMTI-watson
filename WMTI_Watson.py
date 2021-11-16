@@ -4,7 +4,6 @@ from scipy.special import erfi
 from scipy.optimize import least_squares
 from multiprocessing import Pool
 import time
-import numba
 
 
 # %% Class
@@ -31,7 +30,7 @@ class WMTI_Watson:
             raise ValueError('Inputs shapes are not consistent. Volumes must have the same shape')
 
     def version(self):
-        return print('v1, 21.10.21')
+        return print('v1-16.11.21')
 
     def fit(self):
         t = time.time()
@@ -50,7 +49,6 @@ class WMTI_Watson:
 
 
 # %% Functions
-#@numba.jit()
 def wmti_watson_f(x, moments, rand=True):
 
     # moments
@@ -80,7 +78,7 @@ def wmti_watson_f(x, moments, rand=True):
 
     return np.array([F1, F2, F3, F4, F5])
 
-#@numba.jit()
+
 def normal_fit_wmti_watson(roi, D0, D2, W0, W2, W4, x0, lb, ub, rand=False):
     # empty storage
     fx0, fx1, fx2, fx3, fx4 = [], [], [], [], []
@@ -99,7 +97,7 @@ def normal_fit_wmti_watson(roi, D0, D2, W0, W2, W4, x0, lb, ub, rand=False):
         fx4 += [F.x[4]]
         return fx0, fx1, fx2, fx3, fx4
 
-#@numba.jit()
+
 def parfit_wmti_watson(D0, D2, W0, W2, W4, x0, lb, ub):
         moments = [D0, D2, W0, W2, W4]
         F = least_squares(wmti_watson_f, x0=np.array(x0), bounds=(lb, ub), args=[moments],
@@ -119,7 +117,7 @@ def rand_x0(len):
                     np.random.uniform(0.1, 2.5, len),
                     np.random.uniform(1 / 3, 1, len)]).T
 
-#@numba.jit()
+
 def WMTI_Watson_maps(md, ad, rd, mk, ak, rk, mask=None, invivo_flag=True, rand=False, nodes=2):
     '''
     # given md, ad, rd, mk, ak, rk(mean, axial, radial diffusivity, mean, axial, radial kurtosis) maps,
@@ -136,7 +134,7 @@ def WMTI_Watson_maps(md, ad, rd, mk, ak, rk, mask=None, invivo_flag=True, rand=F
     # mask: brain or ROI mask
     # invivo_flag: boolean, flag for in vivo(true) or ex vivo (false)
 
-    # I.Jelescu, July 2021
+    # I.Jelescu, Tommaso Pavan, Nov. 2021
     '''
 
     # avoid /0
