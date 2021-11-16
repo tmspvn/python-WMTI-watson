@@ -164,8 +164,6 @@ def WMTI_Watson_maps(md, ad, rd, mk, ak, rk, mask=None, invivo_flag=True, rand=F
 
     # filter out voxels with unrealistic tensor values
     filt = (md < md_ub) & (rk > 0) & (rk < 10) & (mk > 0) & (mk < 10)
-    import IPython
-    IPython.embed()
     roi = mask & filt  # exclude voxels with unphysical values from calculation
 
     # calculate signal moments
