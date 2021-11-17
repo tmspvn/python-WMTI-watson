@@ -134,7 +134,7 @@ def WMTI_Watson_maps(md, ad, rd, mk, ak, rk, mask=None, invivo_flag=True, rand=F
     # mask: brain or ROI mask
     # invivo_flag: boolean, flag for in vivo(true) or ex vivo (false)
 
-    # I.Jelescu, Tommaso Pavan, Nov. 2021
+    # I.Jelescu, T. Pavan, Nov. 2021
     '''
 
     # avoid /0
