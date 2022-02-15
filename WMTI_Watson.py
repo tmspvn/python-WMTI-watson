@@ -3,23 +3,29 @@ import nibabel as nib
 from scipy.special import erfi
 from scipy.optimize import least_squares
 from multiprocessing import Pool
+from os import listdir
 import time
 
 
 # %% Class
 class WMTI_Watson:
-    def __init__(self, inpath, mask=None, invivo=True, nodes=2, rand=False):
+    def __init__(self, inpath, mask=None, invivo=True, nodes=2, rand=False, inputlist=False):
         self.invivo = invivo
         self.rand = rand
         self.nodes = nodes
-        self.md = nib.load(inpath + '/md.nii')
-        self.md_affine = nib.load(inpath + '/md.nii').affine
-        self.md_header = nib.load(inpath + '/md.nii').header
-        self.ad = nib.load(inpath + '/ad.nii')
-        self.rd = nib.load(inpath + '/rd.nii')
-        self.mk = nib.load(inpath + '/mk.nii')
-        self.ak = nib.load(inpath + '/ak.nii')
-        self.rk = nib.load(inpath + '/rk.nii')
+        if inputlist:
+            self.md, self.ad, self.rd = nib.load(inputlist[0]), nib.load(inputlist[1]), nib.load(inputlist[2])
+            self.mk, self.ak, self.rk = nib.load(inputlist[3]), nib.load(inputlist[4]), nib.load(inputlist[5])
+        else:
+            self.md = nib.load([f for f in listdir(inpath) if 'md' in f.lower()][0])
+            self.ad = nib.load([f for f in listdir(inpath) if 'ad' in f.lower()][0])
+            self.rd = nib.load([f for f in listdir(inpath) if 'rd' in f.lower()][0])
+            self.mk = nib.load([f for f in listdir(inpath) if 'mk' in f.lower()][0])
+            self.ak = nib.load([f for f in listdir(inpath) if 'ak' in f.lower()][0])
+            self.rk = nib.load([f for f in listdir(inpath) if 'rk' in f.lower()][0])
+        # store headers as outputs
+        self.md_affine = self.md.affine
+        self.md_header = self.md.header
         # load ROI mask
         if mask is None:
             self.mask = np.logical_not(np.isnan(self.md.get_fdata()))
@@ -50,7 +56,6 @@ class WMTI_Watson:
 
 # %% Functions
 def wmti_watson_f(x, moments, rand=True):
-
     # moments
     D0 = moments[0]
     D2 = moments[1]
@@ -71,9 +76,9 @@ def wmti_watson_f(x, moments, rand=True):
     F1 = 3 * D0 - f * Da - (1 - f) * (2 * Deperp + Depar)
     F2 = 3 / 2 * D2 - p2 * (f * Da + (1 - f) * (Depar - Deperp))
     F3 = D2 ** 2 + 5 * D0 ** 2 * (1 + W0 / 3) - f * Da ** 2 - (1 - f) * (
-                5 * Deperp ** 2 + (Depar - Deperp) ** 2 + 10 / 3 * Deperp * (Depar - Deperp))
+            5 * Deperp ** 2 + (Depar - Deperp) ** 2 + 10 / 3 * Deperp * (Depar - Deperp))
     F4 = 1 / 2 * D2 * (D2 + 7 * D0) + 7 / 12 * W2 * D0 ** 2 - p2 * (
-                f * Da ** 2 + (1 - f) * ((Depar - Deperp) ** 2 + 7 / 3 * Deperp * (Depar - Deperp)))
+            f * Da ** 2 + (1 - f) * ((Depar - Deperp) ** 2 + 7 / 3 * Deperp * (Depar - Deperp)))
     F5 = 9 * D2 ** 2 / 4 + 35 / 24 * W4 * D0 ** 2 - p4 * (f * Da ** 2 + (1 - f) * (Depar - Deperp) ** 2)
 
     return np.array([F1, F2, F3, F4, F5])
@@ -84,7 +89,6 @@ def normal_fit_wmti_watson(roi, D0, D2, W0, W2, W4, x0, lb, ub, rand=False):
     fx0, fx1, fx2, fx3, fx4 = [], [], [], [], []
     for i in range(roi[roi].flatten().shape[0]):
         print(str(i) + '/' + str(roi[roi].flatten().shape[0] - 1))
-
 
         moments = np.array([D0[roi][i], D2[roi][i], W0[roi][i], W2[roi][i], W4[roi][i]])
         F = least_squares(wmti_watson_f, x0=np.array(x0), bounds=(lb, ub), args=[moments],
@@ -99,23 +103,24 @@ def normal_fit_wmti_watson(roi, D0, D2, W0, W2, W4, x0, lb, ub, rand=False):
 
 
 def parfit_wmti_watson(D0, D2, W0, W2, W4, x0, lb, ub):
-        moments = [D0, D2, W0, W2, W4]
-        F = least_squares(wmti_watson_f, x0=np.array(x0), bounds=(lb, ub), args=[moments],
-                          ftol=1e-6)  # 6 on matlab, ftol
-        fx0 = [F.x[0]]
-        fx1 = [F.x[1]]
-        fx2 = [F.x[2]]
-        fx3 = [F.x[3]]
-        fx4 = [F.x[4]]
+    moments = [D0, D2, W0, W2, W4]
+    F = least_squares(wmti_watson_f, x0=np.array(x0), bounds=(lb, ub), args=[moments],
+                      ftol=1e-6)  # 6 on matlab, ftol
+    fx0 = [F.x[0]]
+    fx1 = [F.x[1]]
+    fx2 = [F.x[2]]
+    fx3 = [F.x[3]]
+    fx4 = [F.x[4]]
 
-        return fx0, fx1, fx2, fx3, fx4
+    return fx0, fx1, fx2, fx3, fx4
 
-def rand_x0(len):
-    return np.array([np.random.uniform(0.1, 0.8, len),
-                    np.random.uniform(1.5, 2.9, len),
-                    np.random.uniform(1.0, 1.8, len),
-                    np.random.uniform(0.1, 2.5, len),
-                    np.random.uniform(1 / 3, 1, len)]).T
+
+def rand_x0(leng):
+    return np.array([np.random.uniform(0.1, 0.8, leng),
+                     np.random.uniform(1.5, 2.9, leng),
+                     np.random.uniform(1.0, 1.8, leng),
+                     np.random.uniform(0.1, 2.5, leng),
+                     np.random.uniform(1 / 3, 1, leng)]).T
 
 
 def WMTI_Watson_maps(md, ad, rd, mk, ak, rk, mask=None, invivo_flag=True, rand=False, nodes=2):
@@ -210,37 +215,3 @@ def WMTI_Watson_maps(md, ad, rd, mk, ak, rk, mask=None, invivo_flag=True, rand=F
     c2 = 1 / (2 * np.sqrt(kappa) * Fs + small) - 1 / (2 * kappa + small)
 
     return f, Da, Depar, Deperp, np.array(c2)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
