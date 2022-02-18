@@ -9,20 +9,22 @@ import time
 
 # %% Class
 class WMTI_Watson:
-    def __init__(self, inpath, mask=None, invivo=True, nodes=2, rand=False, inputlist=False):
+    def __init__(self, files, mask=None, invivo=True, nodes=2, rand=False):
         self.invivo = invivo
         self.rand = rand
         self.nodes = nodes
-        if inputlist:
+        if isinstance(files, tuple) or isinstance(files, list):
+            inputlist = files
             self.md, self.ad, self.rd = nib.load(inputlist[0]), nib.load(inputlist[1]), nib.load(inputlist[2])
             self.mk, self.ak, self.rk = nib.load(inputlist[3]), nib.load(inputlist[4]), nib.load(inputlist[5])
-        else:
-            self.md = nib.load([f for f in listdir(inpath) if 'md' in f.lower()][0])
-            self.ad = nib.load([f for f in listdir(inpath) if 'ad' in f.lower()][0])
-            self.rd = nib.load([f for f in listdir(inpath) if 'rd' in f.lower()][0])
-            self.mk = nib.load([f for f in listdir(inpath) if 'mk' in f.lower()][0])
-            self.ak = nib.load([f for f in listdir(inpath) if 'ak' in f.lower()][0])
-            self.rk = nib.load([f for f in listdir(inpath) if 'rk' in f.lower()][0])
+        elif isinstance(files, str):
+            inpath = files
+            self.md = nib.load([inpath+f'/{f}' for f in listdir(inpath) if 'md' in f.lower()][0])
+            self.ad = nib.load([inpath+f'/{f}' for f in listdir(inpath) if 'ad' in f.lower()][0])
+            self.rd = nib.load([inpath+f'/{f}' for f in listdir(inpath) if 'rd' in f.lower()][0])
+            self.mk = nib.load([inpath+f'/{f}' for f in listdir(inpath) if 'mk' in f.lower()][0])
+            self.ak = nib.load([inpath+f'/{f}' for f in listdir(inpath) if 'ak' in f.lower()][0])
+            self.rk = nib.load([inpath+f'/{f}' for f in listdir(inpath) if 'rk' in f.lower()][0])
         # store headers as outputs
         self.md_affine = self.md.affine
         self.md_header = self.md.header
@@ -36,7 +38,7 @@ class WMTI_Watson:
             raise ValueError('Inputs shapes are not consistent. Volumes must have the same shape')
 
     def version(self):
-        return print('v1-16.11.21')
+        return print('v1-15.02.22')
 
     def fit(self):
         t = time.time()
@@ -47,15 +49,21 @@ class WMTI_Watson:
                                                                              rand=self.rand, nodes=self.nodes)
         return print(np.round_(time.time() - t, 3), 's')
 
+    def maps(self):
+        if hasattr(self, 'f'):
+            return self.f, self.Da, self.Depar, self.Deperp, self.c2
+        else:
+            AttributeError('WMTI-watson has not fitted maps. please run .fit() to fit')
+
     def save(self, outpath):
         for out in ['f', 'Da', 'Depar', 'Deperp', 'c2']:
             newimg = nib.Nifti1Image(eval('self.' + out), affine=self.md_affine, header=self.md_header)
-            nib.save(newimg, outpath + '/' + out + '.nii')
+            nib.save(newimg, outpath + '/' + out + '.nii.gz')
         return
 
 
 # %% Functions
-def wmti_watson_f(x, moments, rand=True):
+def wmti_watson_f(x, moments):
     # moments
     D0 = moments[0]
     D2 = moments[1]
@@ -84,7 +92,7 @@ def wmti_watson_f(x, moments, rand=True):
     return np.array([F1, F2, F3, F4, F5])
 
 
-def normal_fit_wmti_watson(roi, D0, D2, W0, W2, W4, x0, lb, ub, rand=False):
+def normal_fit_wmti_watson(roi, D0, D2, W0, W2, W4, x0, lb, ub):
     # empty storage
     fx0, fx1, fx2, fx3, fx4 = [], [], [], [], []
     for i in range(roi[roi].flatten().shape[0]):
@@ -138,6 +146,7 @@ def WMTI_Watson_maps(md, ad, rd, mk, ak, rk, mask=None, invivo_flag=True, rand=F
 
     # mask: brain or ROI mask
     # invivo_flag: boolean, flag for in vivo(true) or ex vivo (false)
+    * rand: random initialization
 
     # I.Jelescu, T. Pavan, Nov. 2021
     '''
@@ -167,7 +176,7 @@ def WMTI_Watson_maps(md, ad, rd, mk, ak, rk, mask=None, invivo_flag=True, rand=F
 
     # filter out voxels with unrealistic tensor values
     filt = (md < md_ub) & (rk > 0) & (rk < 10) & (mk > 0) & (mk < 10)
-    roi = mask & filt  # exclude voxels with unphysical values from calculation
+    roi = np.logical_and(mask, filt)  # exclude voxels with unphysical values from calculation
 
     # calculate signal moments
     Wpar = ak * (ad / md) ** 2
