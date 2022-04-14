@@ -9,9 +9,15 @@ import time
 
 # %% Class
 class WMTI_Watson:
-    def __init__(self, files, mask=None, invivo=True, nodes=2, rand=False):
-        self.invivo = invivo
+    def __init__(self, files, mask=None, params='invivo', nodes=2,
+                 rand=False, lb=None, ub=None, md_ub=None, outprefix=''):
+        self.params = params
+        self.lb = lb
+        self.ub = ub
+        self.md_ub = md_ub
+        self.initialize_parameters()
         self.rand = rand
+        self.outprefix = outprefix
         self.nodes = nodes
         if isinstance(files, tuple) or isinstance(files, list):
             inputlist = files
@@ -37,28 +43,52 @@ class WMTI_Watson:
                 self.md.shape == self.ad.shape == self.rd.shape == self.mk.shape == self.ak.shape == self.rk.shape == self.mask.shape):
             raise ValueError('Inputs shapes are not consistent. Volumes must have the same shape')
 
-    def version(self):
-        return print('v1-15.02.22')
+    def __version__(self):
+        return print('v1-03.03.22')
+
+    def initialize_parameters(self):
+        # Fit lower bound for model parameters[f, Da, Depar, Deperp, kappa]
+        if self.params == 'invivo':
+            self.lb = [0, 0, 0, 0, 0]
+            self.ub = [1, 4, 3, 3, 128]  # fit upper bound for model parameters, in vivo
+            self.x0 = [0.9, 2.2, 1.6, 0.7, 7]  # initial guess, in vivo ### [f, Da, Depar, Deperp, kappa]
+            self.md_ub = 2.5  # upper bound on md to avoid CSF contamination
+        elif self.params == 'exvivo':
+            self.lb = [0, 0, 0, 0, 0]
+            self.ub = [1, 2, 2, 2, 128]  # fit upper bound for model parameters, ex vivo
+            self.x0 = [0.9, 1.6, 1, 0.4, 7]  # initial guess, ex vivo
+            self.md_ub = 1.8
+        else:
+            if np.all([len(self.lb) == 5, len(self.ub) == 5, len(self.x0) == 5]):
+                return  # Use input
+            else:
+                raise ValueError('Lower bound(lb), upper bound(ub) and initialization parameter(params) must have '
+                                 'lenght 5 and follow this order: (f, Da, Depar, Deperp, kappa) or specify one of:'
+                                 ' "invivo" or "exvivo"')
 
     def fit(self):
         t = time.time()
         self.f, self.Da, self.Depar, self.Deperp, self.c2 = WMTI_Watson_maps(self.md.get_fdata(), self.ad.get_fdata(),
                                                                              self.rd.get_fdata(), self.mk.get_fdata(),
                                                                              self.ak.get_fdata(), self.rk.get_fdata(),
-                                                                             self.mask, invivo_flag=self.invivo,
+                                                                             self.mask, lb=self.lb, ub=self.ub,
+                                                                             params=self.params, md_ub=self.md_ub,
                                                                              rand=self.rand, nodes=self.nodes)
-        return print(np.round_(time.time() - t, 3), 's')
+        return print('Completed in ', np.round_(time.time() - t, 3), 's')
 
     def maps(self):
         if hasattr(self, 'f'):
             return self.f, self.Da, self.Depar, self.Deperp, self.c2
         else:
-            AttributeError('WMTI-watson has not fitted maps. please run .fit() to fit')
+            AttributeError('WMTI-watson has not fitted maps. Please run .fit() to fit')
 
     def save(self, outpath):
-        for out in ['f', 'Da', 'Depar', 'Deperp', 'c2']:
-            newimg = nib.Nifti1Image(eval('self.' + out), affine=self.md_affine, header=self.md_header)
-            nib.save(newimg, outpath + '/' + out + '.nii.gz')
+        if hasattr(self, 'f'):
+            for out in ['f', 'Da', 'Depar', 'Deperp', 'c2']:
+                newimg = nib.Nifti1Image(eval('self.' + out), affine=self.md_affine, header=self.md_header)
+                nib.save(newimg, outpath + f'/{self.outprefix}' + out + '.nii.gz')
+        else:
+            AttributeError('WMTI-watson has not fitted maps. Please run .fit() to fit')
         return
 
 
@@ -93,7 +123,7 @@ def wmti_watson_f(x, moments):
 
 
 def normal_fit_wmti_watson(roi, D0, D2, W0, W2, W4, x0, lb, ub):
-    # empty storage
+    # Empty storage
     fx0, fx1, fx2, fx3, fx4 = [], [], [], [], []
     for i in range(roi[roi].flatten().shape[0]):
         print(str(i) + '/' + str(roi[roi].flatten().shape[0] - 1))
@@ -124,14 +154,15 @@ def parfit_wmti_watson(D0, D2, W0, W2, W4, x0, lb, ub):
 
 
 def rand_x0(leng):
-    return np.array([np.random.uniform(0.1, 0.8, leng),
-                     np.random.uniform(1.5, 2.9, leng),
-                     np.random.uniform(1.0, 1.8, leng),
-                     np.random.uniform(0.1, 2.5, leng),
-                     np.random.uniform(1 / 3, 1, leng)]).T
+    return np.array([np.random.uniform(0.1, 0.9, leng),
+                     np.random.uniform(1.5, 2.5, leng),
+                     np.random.uniform(0.5, 1.5, leng),
+                     np.random.uniform(0.0, 0.5, leng),
+                     np.random.uniform(4.0, 16, leng)]).T     #1/3,1
 
 
-def WMTI_Watson_maps(md, ad, rd, mk, ak, rk, mask=None, invivo_flag=True, rand=False, nodes=2):
+def WMTI_Watson_maps(md, ad, rd, mk, ak, rk, mask=None, lb=[0, 0, 0, 0, 0], ub=[1, 4, 3, 3, 128], md_ub=2.5,
+                     params=[0.9, 2.2, 1.6, 0.7, 7], rand=False, nodes=2):
     '''
     # given md, ad, rd, mk, ak, rk(mean, axial, radial diffusivity, mean, axial, radial kurtosis) maps,
     # calculate WM model parameter maps:
@@ -151,21 +182,12 @@ def WMTI_Watson_maps(md, ad, rd, mk, ak, rk, mask=None, invivo_flag=True, rand=F
     # I.Jelescu, T. Pavan, Nov. 2021
     '''
 
-    # avoid /0
+    # Avoid /0
     small = 0.0000000001
-    # fit lower bound for model parameters[f, Da, Depar, Deperp, kappa]
-    lb = [0, 0, 0, 0, 0]
-    if invivo_flag:
-        ub = [1, 3, 3, 3, 128]  # fit upper bound for model parameters, in vivo
-        x0 = [0.9, 2.2, 1.6, 0.7, 7]  # initial guess, in vivo ### [f, Da, Depar, Deperp, c2]
-        md_ub = 2.5
-    else:
-        ub = [1, 2, 2, 2, 128]  # fit upper bound for model parameters, ex vivo
-        x0 = [0.9, 1.6, 1, 0.4, 7]  # initial guess, ex vivo
-        md_ub = 1.8  # upper bound on md to avoid CSF contamination
+    x0 = params
 
     # Check md in um2 / ms and not mm2 / s, if not, convert
-    if np.nanmax(md) < 1e-2:
+    if np.nanmedian(md) < 1e-2:
         md = md * 1e3
         ad = ad * 1e3
         rd = rd * 1e3
@@ -174,11 +196,11 @@ def WMTI_Watson_maps(md, ad, rd, mk, ak, rk, mask=None, invivo_flag=True, rand=F
     if mask is None:
         mask = np.logical_not(np.isnan(md))
 
-    # filter out voxels with unrealistic tensor values
+    # Filter out voxels with unrealistic tensor values
     filt = (md < md_ub) & (rk > 0) & (rk < 10) & (mk > 0) & (mk < 10)
     roi = np.logical_and(mask, filt)  # exclude voxels with unphysical values from calculation
 
-    # calculate signal moments
+    # Calculate signal moments
     Wpar = ak * (ad / md) ** 2
     Wperp = rk * (rd / md) ** 2
 
@@ -188,7 +210,7 @@ def WMTI_Watson_maps(md, ad, rd, mk, ak, rk, mask=None, invivo_flag=True, rand=F
     W2 = 1 / 7 * (3 * Wpar + 5 * mk - 8 * Wperp)
     W4 = 4 / 7 * (Wpar - 3 * mk + 2 * Wperp)
 
-    # random starting points?
+    # Random initialization?
     if rand:
         prep_x0 = rand_x0(D0[roi].shape[0])
     else:
