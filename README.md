@@ -1,4 +1,4 @@
-# WMTI-watson-py*
+# WMTI-watson-py
 Given mean, axial, radial diffusivity, mean, axial, radial kurtosis maps,
 calculate WM model parameter maps: 
 - f: axonal water Fraction.
@@ -56,6 +56,3 @@ WMTI-watson-py internal function are easily accessible via:
     wmti.WMTI_Watson_maps
     wmti.parfit_wmti_watson
     wmti.normal_fit_wmti_watson
-
-
-## _*in testing_
