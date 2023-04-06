@@ -72,7 +72,7 @@ class WMTI_Watson:
                                                                              self.rd.get_fdata(), self.mk.get_fdata(),
                                                                              self.ak.get_fdata(), self.rk.get_fdata(),
                                                                              self.mask, lb=self.lb, ub=self.ub,
-                                                                             params=self.params, md_ub=self.md_ub,
+                                                                             params=self.x0, md_ub=self.md_ub,
                                                                              rand=self.rand, nodes=self.nodes)
         return print('Completed in ', np.round_(time.time() - t, 3), 's')
 
