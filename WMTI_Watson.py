@@ -243,6 +243,6 @@ def WMTI_Watson_maps(md, ad, rd, mk, ak, rk, mask=None, lb=[0, 0, 0, 0, 0], ub=[
     # main bundle orientation(an easier metric of orientations dispersion, c2
     # varies between 1 / 3(isotropic) and 1(perfectly parallel axons)
     Fs = np.sqrt(np.pi) / 2 * np.exp(-kappa) * erfi(np.sqrt(kappa))
-    c2 = 1 / (2 * np.sqrt(kappa) * Fs + small) - 1 / (2 * kappa + small)
+    c2 = 1 / (2 * np.sqrt(kappa) * Fs + small) - 1 / (2 * kappa)
 
     return f, Da, Depar, Deperp, np.array(c2)
